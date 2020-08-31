@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, height=device-height, initial-scale=1.0, minimum-scale=1, maximum-scale=1.0, user-scalable=no">
+    <title>命名工具</title>
+    <script src="https://common.cnblogs.com/scripts/jquery-2.2.0.min.js"></script>
+    <script src="../dist/flexsearch.compact.js"></script>
+    <script src="./vars.js"></script>
+    <style>
+        body {
+            padding: 0;
+            margin: 0 10px;
+            font-size: 16px;
+        }
+
+        table {
+            padding-top: 10px;
+            background-color: #fff;
+            z-index: 1;
+        }
+
+        td,
+        tr {
+            width: 400px;
+            border: none;
+        }
+
+        input {
+            width: 400px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            outline: none;
+            background-color: transparent;
+            -webkit-appearance: none;
+        }
+
+        input {
+            padding: 7px 5px;
+            box-sizing: border-box;
+        }
+
+        #suggestions {
+            position: relative;
+            top: 50px;
+        }
+
+        #suggestions div {
+            padding: 10px 0;
+            margin: 0 8px;
+            border-bottom: 1px solid #ddd;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        #suggestions div .tips{
+           font-size: 12px;
+           color: gray;
+        }
+
+        @media only screen and (max-width: 600px) {
+
+            table,
+            td,
+            tr,
+            input {
+                width: 97%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <table>
+        <tr>
+            <td>
+                <span>中文(输入完成后按回车搜索):</span><input type="text" id="cnText" placeholder="输入待命名的变量中文含义" />
+                <span>机器翻译结果(可手动调整，以便从库里匹配):</span>
+                <input type="text" id="userinput" placeholder="机器翻译结果，可手动调整，以更好匹配" />
+            </td>
+        </tr>
+
+    </table>
+    <div id="suggestions">loading...</div>
+    <script>
+        function formatVariable(queryStr) {
+            let variables = queryStr.split(' ');
+            for (let i = 1; i < variables.length; i++) {
+                let word = variables[i];
+                variables[i] = word.replace(word[0], word[0].toUpperCase());
+            }
+            return variables.join('');
+        }
+
+        function formatTranslationArr(arr) {
+            if (!arr) {
+                return null;
+            }
+            return arr.join(' ')
+                .replace(/[!$%^&*()_+|~=`{}\[\]:";'<>?,.\/]/g, '')
+                .split(' ').filter(function (key, idx, inputArray) {
+                    return inputArray.indexOf(key) == idx && !/^(a|an|the)$/ig.test(key);
+                }).join(' ');
+        }
+
+        function formatSuggestion(item){
+            return `${item.name} <span class='tips'>代码库共出现${item.count}次</span>`;
+        }
+
+
+        $(document).ready(function () {
+
+            var index = new FlexSearch({
+                encode: "advanced",
+                tokenize: "reverse",
+                suggest: true,
+                cache: true
+            });
+            var data = [];
+            var i = 0;
+            for (var name in names) {
+                var indexName = name.replace(/([A-Z])/g, " $1");
+                data[i] = {
+                    "name": name,
+                    "count": names[name]
+                };
+                index.add(i++, indexName);
+            }
+
+            $("#suggestions").html("");
+            var suggestions = document.getElementById("suggestions");
+            var autocomplete = document.getElementById("autocomplete");
+            var userinput = document.getElementById("userinput");
+            var cnText = document.getElementById("cnText");
+
+            userinput.addEventListener("input", show_results, true);
+
+            $(cnText).on("keydown", function (e) {
+                if (e.keyCode == 13) {
+                    let queryStr = $(cnText).val();
+                    $.getJSON(
+                        `https://fanyi.youdao.com/openapi.do?callback=?&keyfrom=Codelf&key=2023743559&type=data&doctype=jsonp&version=1.1&q=${queryStr}`,
+                        function (data) {
+                            let translation = "";
+                            if (data && data.translation) {
+                                translation = formatTranslationArr(data.translation);
+                            }
+                            $(userinput).val(translation);
+                            show_results.apply(userinput);
+                        });
+                }
+
+            });
+
+            function show_results() {
+
+                var value = this.value;
+                var results = index.search(value, 25);
+
+                results = results.map(function (i) {
+                    return data[i]
+                });
+
+                results = results.sort(function (a, b) {
+                    return b.count - a.count;
+                });
+
+                var entry, childs = suggestions.childNodes;
+                var i = 0,
+                    len = results.length;
+
+                for (; i < len; i++) {
+
+                    entry = childs[i];
+
+                    if (!entry) {
+
+                        entry = document.createElement("div");
+                        suggestions.appendChild(entry);
+                    }
+
+                    entry.innerHTML = formatSuggestion(results[i]);
+                }
+
+                while (childs.length > len) {
+
+                    suggestions.removeChild(childs[i])
+                }
+
+                if (len == 0) {
+                    entry = document.createElement("div");
+                    suggestions.appendChild(entry);
+                    entry.textContent = formatVariable(userinput.value);
+                    return;
+                }
+
+            }
+
+
+        });
+    </script>
+</body>
+
+</html>
